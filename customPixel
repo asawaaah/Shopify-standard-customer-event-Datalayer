@@ -12,7 +12,7 @@ function gtag() { dataLayer.push(arguments); }
   j.async = true;
   j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
   f.parentNode.insertBefore(j, f);
-})(window, document, 'script', 'dataLayer', 'GTM-XXXXXXXX'); // ADD YOUR GTM ID
+})(window, document, 'script', 'dataLayer', 'GTM-XXXXXXXX');
 
 // Utility function to build payloads dynamically
 function buildPayload(eventType, event) {
@@ -75,7 +75,7 @@ function buildPayload(eventType, event) {
           value: cartLine.cost.totalAmount.amount || 0,
           items: [{
             item_id: merchandise.sku || "unknown_id",
-            item_name: merchandise.title || "Unknown Product",
+            item_name: cartAddedProduct.title || "Unknown Product",
             item_brand: cartAddedProduct.vendor || "Unknown Brand",
             item_category: cartAddedProduct.type || "Unassigned product type",
             price: merchandise.price.amount || 0,
