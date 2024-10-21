@@ -1,0 +1,278 @@
+// Define dataLayer and gtag function
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+
+// Initialize GTM tag
+(function (w, d, s, l, i) {
+  w[l] = w[l] || [];
+  w[l].push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+  var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s),
+      dl = l != 'dataLayer' ? '&l=' + l : '';
+  j.async = true;
+  j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
+  f.parentNode.insertBefore(j, f);
+})(window, document, 'script', 'dataLayer', 'GTM-KP7RTHLP');
+
+// Global flag to ensure user data is pushed only once
+//let userDataPushed = false;
+
+
+// Utility function to build payloads dynamically
+function buildPayload(eventType, event) {
+  switch (eventType) {
+    case "page_viewed":
+      return {
+        event: 'page_view',
+        page_location: event.context.document.location.href,
+        page_title: event.context.document.title,
+        timestamp: event.timestamp,
+      };
+
+    case "collection_viewed":
+      const items = (event.data.collection.productVariants || []).map(variant => {
+        const product = variant.product || {};
+        return {
+          item_id: variant.sku || "unknown_id",
+          item_name: product.title || "Unknown Product",
+          item_brand: product.vendor || "Unknown Brand",
+          item_category: product.type || "Unassigned product type",
+          price: variant.price?.amount ?? 0,
+          currency: product.price?.currencyCode || "USD",
+        };
+      });
+      return {
+        event: 'view_item_list',
+        ecommerce: {
+        item_list_id: event.data.collection.id,
+        item_list_name: event.data.collection.title,
+        items: items
+        }
+      };
+
+    case "product_viewed":
+      const variant = event.data.productVariant;
+      const product = variant.product || {};
+      return {
+        event: 'view_item',
+        ecommerce: {
+          currency: variant.price?.currencyCode || "USD",
+          value: variant.price?.amount ?? 0,
+          items: [{
+            item_id: variant.sku || "unknown_id",
+            item_name: product.title || "Unknown Product",
+            item_brand: product.vendor || "Unknown Brand",
+            item_category: product.type || "Unassigned product type",
+            price: variant.price?.amount ?? 0,
+          }],
+        },
+      };
+
+    case "product_added_to_cart":
+      const cartLine = event.data.cartLine;
+      const merchandise = cartLine.merchandise;
+      const cartAddedProduct = merchandise.product;
+      return {
+        event: 'add_to_cart',
+        ecommerce: {
+          currency: cartLine.cost.totalAmount.currencyCode || "USD",
+          value: cartLine.cost.totalAmount.amount || 0,
+          items: [{
+            item_id: merchandise.sku || "unknown_id",
+            item_name: cartAddedProduct.title || "Unknown Product",
+            item_brand: cartAddedProduct.vendor || "Unknown Brand",
+            item_category: cartAddedProduct.type || "Unassigned product type",
+            price: merchandise.price.amount || 0,
+            quantity: cartLine.quantity || 1,
+          }],
+        },
+      };
+
+    case "cart_viewed":
+      const cart = event.data.cart;
+      const cartItems = cart.lines.map(line => {
+        const merchandise = line.merchandise;
+        const product = merchandise.product || {};
+
+        return {
+          item_id: merchandise.sku || "unknown_id",
+          item_name: product.title || "Unknown Product",
+          item_brand: product.vendor || "Unknown Brand",
+          item_category: product.type || "Unassigned product type",
+          price: merchandise.price.amount || 0,
+          quantity: line.quantity || 1, 
+        };
+      });
+
+      return {
+        event: 'view_cart',
+        ecommerce: {
+        currency: cart.cost?.totalAmount?.currencyCode || 'USD',
+        value: cart.cost?.totalAmount?.amount || 0,
+        items: cartItems
+        },
+      };
+
+      case "search_submitted":
+        return {
+          event: 'search',
+          search_term: event.data.searchResult.query || 'not captured',
+        };
+
+      case "product_removed_from_cart":
+        return {
+          event: 'remove_from_cart',
+          ecommerce: {
+            currency: event.data.cartLine.cost.totalAmount.currencyCode || "USD",
+            value: event.data.cartLine.cost.totalAmount.amount || 0,
+            items: [{
+            item_id: event.data.cartLine.merchandise.sku || "unknown_id",
+            item_name: event.data.cartLine.merchandise.product.title || "Unknown Product",
+            item_brand: event.data.cartLine.merchandise.product.vendor || "Unknown Brand",
+            item_category: event.data.cartLine.merchandise.product.type || "Unassigned product type",
+            price: event.data.cartLine.merchandise.price.amount || 0,
+            quantity: event.data.cartLine.quantity || 1,
+          }],
+          }
+        };
+
+      case "checkout_started":
+      const checkout_cart = event.data.checkout;
+      // Map all discount codes
+      const allDiscountCodes = checkout_cart.discountApplications
+        .filter((discount) => discount.type === 'DISCOUNT_CODE')
+        .map((discount) => discount.title);
+
+  // Join discount codes into a single string (if there are multiple codes)
+    const coupon = allDiscountCodes.length > 0 ? allDiscountCodes.join(', ') : 'none';
+
+  // Map the line items
+      const checkoutItems = (checkout_cart.lineItems || []).map(lineItem => {
+        const variant = lineItem.variant;
+        const product = variant.product || {};
+
+        return {
+          item_id: variant.sku || "unknown_id",
+          item_name: product.title || "Unknown Product",
+          item_brand: product.vendor || "Unknown Brand",
+          item_category: product.type || "Unassigned product type",
+          price: parseFloat(variant.price.amount || 0),
+          quantity: lineItem.quantity || 1, 
+        };
+      });
+
+      return {
+        event: 'begin_checkout',
+        ecommerce:{
+          currency: checkout_cart.currencyCode || 'USD',
+          value: parseFloat(checkout_cart.subtotalPrice?.amount || 0),
+          coupon: coupon,
+          discountAmount: parseFloat(checkout_cart.discountsAmount?.amount || 0),
+          shippingRate: parseFloat(checkout_cart.shippingLine?.price?.amount || 0),
+          tax: parseFloat(checkout_cart.totalTax?.amount || 0),
+          total_price: parseFloat(checkout_cart.totalPrice?.amount || 0),
+      items: checkoutItems
+        }
+      }
+
+      case "checkout_completed":
+  const completed_checkout = event.data.checkout;
+
+  // Map all discount codes
+  const completedDiscountCodes = completed_checkout.discountApplications
+    .filter((discount) => discount.type === 'DISCOUNT_CODE')
+    .map((discount) => discount.title);
+
+  // Join discount codes into a single string (if there are multiple codes)
+  const purchaseCoupon = completedDiscountCodes.length > 0 ? completedDiscountCodes.join(', ') : 'none';
+
+  // Map payment transactions to extract type and name
+  const paymentTransactions = (completed_checkout.transactions || []).map((transaction) => ({
+    paymentType: transaction.paymentMethod?.type || 'unknown_type',
+    paymentName: transaction.paymentMethod?.name || 'unknown_name',
+    amount: parseFloat(transaction.amount || 0),
+    gateway: transaction.gateway || 'unknown_gateway',
+  }));
+
+  // Join all payment types and names for reporting
+  const paymentTypes = paymentTransactions.map(t => t.paymentType).join(', ');
+  const paymentNames = paymentTransactions.map(t => t.paymentName).join(', ');
+
+  // Map the line items
+  const purchasedItems = (completed_checkout.lineItems || []).map(lineItem => {
+    const variant = lineItem.variant || {};
+    const product = variant.product || {};
+
+    return {
+      item_id: variant.sku || "unknown_id",
+      item_name: product.title || "Unknown Product",
+      item_brand: product.vendor || "Unknown Brand",
+      item_category: product.productType || "Unassigned product type",
+      price: parseFloat(variant.price.amount || 0),
+      quantity: lineItem.quantity || 1,
+    };
+  });
+
+  // Build and return the GA4 purchase event payload
+  return {
+    event: 'purchase',
+    ecommerce: {
+      transaction_id: completed_checkout.order.id || 'unknown_order_id',  // Required
+      affiliation: completed_checkout.sourceName || 'Online Store',  // Optional
+      value: parseFloat(completed_checkout.subtotalPrice?.amount || 0),  // Required
+      currency: completed_checkout.currencyCode || 'USD',  // Optional
+      tax: parseFloat(completed_checkout.totalTax?.amount || 0),  // Optional
+      shipping: parseFloat(completed_checkout.shippingLine?.price?.amount || 0),
+      total_price: parseFloat(completed_checkout.totalPrice?.amount|| 0),
+      payment_method: paymentTypes,  // All payment types as a string
+      payment_name: paymentNames,  // All payment names as a string
+      coupon: purchaseCoupon,  // Optional
+      items: purchasedItems,  // Required
+    },
+    payment_transactions: paymentTransactions
+  };
+
+        
+    // Handle more cases like "cart_viewed", "checkout_started" as needed
+  
+    default:
+      console.warn(`Unhandled event type: ${eventType}`);
+      return null;
+  }
+}
+
+// Subscribe to all standard Shopify events
+analytics.subscribe('all_standard_events', (event) => {
+  const eventType = event.name;  // Extract the event name from the event object
+  const payload = buildPayload(eventType, event);
+  const customer = init.data.customer;
+  const company = init.data.purchasingCompany;
+ // Determine if the user is logged in or a guest
+  const isLoggedIn = !!customer;
+
+  // Define userData at the top so it's accessible throughout the function
+  let userData;
+// Only log customer and company data if the user is logged in
+  if (isLoggedIn) {
+    userData = {
+      user_id: customer?.id || 'Unknown',
+      firstName: customer?.firstName || 'Guest',
+      lastName: customer?.lastName || '',
+      companyName: company?.company?.name || 'N/A',
+      companyLocation: company?.location?.name || 'N/A',
+      loggedIn: isLoggedIn,
+    };
+  } else {
+    userData = { loggedIn: isLoggedIn };
+  }
+
+  // Push userData to the dataLayer if not already pushed
+    window.dataLayer.push({ userData }); // Push userData as a separate object
+    console.log("User Data Pushed to dataLayer:", userData);
+
+  if (payload) {
+    console.log("Payload envoyé :", payload);
+    window.dataLayer.push(payload);  // Push the payload to the dataLayer
+  }
+});
+
